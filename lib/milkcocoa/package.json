@@ -1,0 +1,25 @@
+{
+  "name": "milkcocoa-node",
+  "version": "0.0.1",
+  "description": "milkcocoa client for Node.js.",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/milk-cocoa/milkcocoa.git"
+  },
+  "dependencies": {
+  	"socket.io-client" : "1.0.*"
+  },
+  "keywords": [
+    "milkcocoa",
+    "realtime"
+  ],
+  "author": "Technicak Rockstars",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/milk-cocoa/milkcocoa/issues"
+  }
+}
