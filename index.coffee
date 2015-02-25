@@ -190,7 +190,6 @@ class TwitterBot
           second: encodeURIComponent "##{tag}"
           third: '__end__'
 
-    return if data.user.protected
     return if isIgnore
     return if isRetweet or isRetweet2
     return if isBot
@@ -215,6 +214,8 @@ class TwitterBot
 
     if data.status.text.length < 4
       return
+
+    return if data.user.protected
 
     parts = _.map @tokenize(data.status.text), 'surface'
     @storeTweet parts
