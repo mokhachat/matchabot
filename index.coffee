@@ -190,6 +190,7 @@ class TwitterBot
           second: encodeURIComponent "##{tag}"
           third: '__end__'
 
+    return if data.user.protected
     return if isIgnore
     return if isRetweet or isRetweet2
     return if isBot
