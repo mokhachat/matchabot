@@ -172,24 +172,6 @@ class TwitterBot
 
     data.status.text = @preReplace data.status.text, data.user.screen_name
 
-    if isLink
-      data.status.text = data.status.text.replace /https*:[^\s　]+/g, ""
-      urls = _.map data.status.urls, 'url'
-      _.forEach urls, (url)->
-        tweetDS.push
-          first: ' '
-          second: encodeURIComponent url
-          third: '__end__'
-
-    if isHashtag
-      data.status.text = data.status.text.replace /#[^\s　]+/g, ""
-      tags = _.map data.status.hashtags, 'text'
-      _.forEach tags, (tag)->
-        tweetDS.push
-          first: ' '
-          second: encodeURIComponent "##{tag}"
-          third: '__end__'
-
     return if isIgnore
     return if isRetweet or isRetweet2
     return if isBot
@@ -216,6 +198,24 @@ class TwitterBot
       return
 
     return if data.user.protected
+
+    if isLink
+      data.status.text = data.status.text.replace /https*:[^\s　]+/g, ""
+      urls = _.map data.status.urls, 'url'
+      _.forEach urls, (url)->
+        tweetDS.push
+          first: ' '
+          second: encodeURIComponent url
+          third: '__end__'
+
+    if isHashtag
+      data.status.text = data.status.text.replace /#[^\s　]+/g, ""
+      tags = _.map data.status.hashtags, 'text'
+      _.forEach tags, (tag)->
+        tweetDS.push
+          first: ' '
+          second: encodeURIComponent "##{tag}"
+          third: '__end__'
 
     parts = _.map @tokenize(data.status.text), 'surface'
     @storeTweet parts
