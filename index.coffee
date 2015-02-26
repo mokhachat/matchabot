@@ -257,7 +257,7 @@ class TwitterBot
 
         if parts.third is '__end__'
           res = "#{res}#{decodeURIComponent parts.second}" if parts.second isnt '__end__'
-          return cb "#{res}#{decodeURIComponent parts.first}"
+          return cb res
 
         res = "#{res}#{decodeURIComponent parts.second}" if parts.second isnt '__first__'
         recur parts.third, i + 1, "#{res}#{decodeURIComponent parts.third}"
