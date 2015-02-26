@@ -150,7 +150,7 @@ class TwitterBot
     isRetweet2 = new RegExp(/(R|Q)T @[^\s　]+/g).test data.status.text
     isLink = if data.status.urls.length is 0 then false else true
     isHashtag = if data.status.hashtags.length is 0 then false else true
-    isBot = new RegExp(/bot/i).test(data.user.screen_name) or new RegExp(/bot/i).test(data.user.user_name)
+    isBot = [data.user.screen_name, data.user.user_name, data.status.via].some (v)-> new RegExp(/bot/i).test(v)
     isIgnore = [
       /Tweet Button/i
       /ツイ廃あらーと/i
@@ -172,6 +172,9 @@ class TwitterBot
 
     data.status.text = @preReplace data.status.text, data.user.screen_name
 
+    if isBot
+      logger.debug "#{data.user.screen_name} #{data.user.user_name} #{data.status.via}"
+
     return if isIgnore
     return if isRetweet or isRetweet2
     return if isBot
@@ -185,7 +188,7 @@ class TwitterBot
       return
 
     if ["まっちゃ", "matcha", "MATCHA", "Matcha", "マッチャ"].some((v)-> v is data.status.text)
-      @action.emit 'tweet', text: data.status.text
+      @action.emit 'tweet', text: util.randArray(["まっちゃ", "matcha", "MATCHA", "Matcha", "マッチャ", "抹茶"])
       @action.emit 'favorite', status_id: data.status.id
       return
 
