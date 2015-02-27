@@ -89,11 +89,20 @@ class TwitterBot
       logger.error "error: #{ins err}".red if err
       logger.debug "result: #{ins res}".green if res
 
+    tps = 0
+
+    setInterval (-> tps = 0), 1000
+
     @action.on "error", (data)=>
       logger.error "error: #{ins data}".red
       @client.tweet "#{ins data}", tw_callback
 
     @action.on "tweet", (data)=>
+      tps++
+      if tps > 3
+        @client.tweet "@mokha_t 異常を確認しました。終了します。"
+        setTimeout (-> process.exit 1), 1000
+        return
       data.text = @afterReplace data.text
       logger.debug "tweet: #{ins data}".cyan
       @client.tweet data.text, tw_callback
@@ -151,6 +160,7 @@ class TwitterBot
     isLink = if data.status.urls.length is 0 then false else true
     isHashtag = if data.status.hashtags.length is 0 then false else true
     isBot = [data.user.screen_name, data.user.user_name, data.status.via].some (v)-> new RegExp(/bot/i).test(v)
+    isBot = false if new RegExp(/tweetbot/i).test data.status.via
     isIgnore = [
       /Tweet Button/i
       /ツイ廃あらーと/i
@@ -172,14 +182,19 @@ class TwitterBot
 
     data.status.text = @preReplace data.status.text, data.user.screen_name
 
-    if isBot
-      logger.debug "#{data.user.screen_name} #{data.user.user_name} #{data.status.via}"
-
     return if isIgnore
     return if isRetweet or isRetweet2
     return if isBot
 
     if isMention
+      if /stop/i.test data.status.text
+        @action.emit 'reply',
+          status_id: data.status.id
+          screen_name: data.user.screen_name
+          text: "終了します。"
+        setTimeout (-> process.exit 1), 1000
+        return
+
       @createTweet (text)=>
         @action.emit 'reply',
           status_id: data.status.id
@@ -253,7 +268,13 @@ class TwitterBot
     recur = (key, i, res)->
       return cb(res.slice(0, 140)) if res.length > 140
       return cb(res) if i > 20
-      tweetDS.query(first: key).limit(10000).done (data)->
+      flag = false
+      tweetDS.query(first: key).limit(1000).done (data)->
+        if flag
+          logger.warn "CALLED CALLBACK TWO TIMES !!"
+          return
+        flag = true
+        console.log key, data.length
         return cb(res) unless data.length
 
         parts = util.randArray data
