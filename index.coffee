@@ -195,6 +195,14 @@ class TwitterBot
         setTimeout (-> process.exit 1), 1000
         return
 
+      parts = _.map @tokenize(data.status.text), 'type'
+      if parts.some((v)-> /命令/.test v)
+        @action.emit 'reply',
+          status_id: data.status.id
+          screen_name: data.user.screen_name
+          text: util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
+        return
+
       @createTweet (text)=>
         @action.emit 'reply',
           status_id: data.status.id
@@ -207,10 +215,21 @@ class TwitterBot
       @action.emit 'favorite', status_id: data.status.id
       return
 
-    if new RegExp(/抹茶/).test data.status.text
+    if new RegExp(/抹茶bot/).test data.status.text
+      @action.emit 'tweet', text: util.randArray ["抹茶おいしい！抹茶！", "∵ゞ(＞д＜)ﾊｯｸｼｭﾝ!", "(　>д<)､;'.･　ｨｸｼｯ", "(* >ω<)=3ﾍｯｸｼｮﾝ!", "Σ", "∑", "嫌ー！"]
+      @action.emit 'favorite', status_id: data.status.id
+      return
+
+    if new RegExp(/抹茶[^村]/).test data.status.text
       @action.emit 'tweet', text: util.randArray ["抹茶おいしい！抹茶！", "！！", "ぽよ", "にゃーん", "抹茶", "matcha"]
       @action.emit 'favorite', status_id: data.status.id
       return
+
+    if new RegExp(/嫌ー+[!！]+/).test data.status.text
+      @action.emit 'tweet', text: util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
+      @action.emit 'favorite', status_id: data.status.id
+      return
+
 
     if data.status.text.length < 4
       return
