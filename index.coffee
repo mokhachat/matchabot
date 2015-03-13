@@ -195,7 +195,8 @@ class TwitterBot
         setTimeout (-> process.exit 1), 1000
         return
 
-      parts = _.map @tokenize(data.status.text), 'type'
+      parts = _.map @tokenize(data.status.text), 'conj'
+      console.log parts
       if parts.some((v)-> /命令/.test v)
         @action.emit 'reply',
           status_id: data.status.id
@@ -345,9 +346,11 @@ kuromoji.builder(dicPath: KUROMOJI_DIC_DIR).build (err, tokenizer)->
     "pos": "type"
     "basic_form": "base"
     "reading": "reading"
+    "conjugated_form": "conj"
 
   analyer = (text)->
     _.map tokenizer.tokenize(text), (obj)->
+      console.log obj
       _.transform obj, (res, v, k)->
         res[keymap[k]] = v if _.has(keymap, k)
 
