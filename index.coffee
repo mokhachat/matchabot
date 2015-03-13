@@ -220,7 +220,10 @@ class TwitterBot
       @action.emit 'favorite', status_id: data.status.id
       return
 
-    if new RegExp(/抹茶[^村]/).test data.status.text
+    if new RegExp(/抹茶村/).test data.status.text
+      return
+
+    if new RegExp(/抹茶/).test data.status.text
       @action.emit 'tweet', text: util.randArray ["抹茶おいしい！抹茶！", "！！", "ぽよ", "にゃーん", "抹茶", "matcha"]
       @action.emit 'favorite', status_id: data.status.id
       return
