@@ -19,6 +19,7 @@ require 'colors'
 
 ins = require('util').inspect
 
+
 # kuromoji
 KUROMOJI_DIC_DIR = "./node_modules/kuromoji/dist/dict/"
 
@@ -193,6 +194,14 @@ class TwitterBot
           screen_name: data.user.screen_name
           text: "終了します。"
         setTimeout (-> process.exit 1), 1000
+        return
+
+      if /cal/i.test data.status.text
+        exec 'cal', (error, stdout, stderr)->
+          @action.emit 'reply',
+            status_id: data.status.id
+            screen_name: data.user.screen_name
+            text: "\n#{stdout}"
         return
 
       parts = _.map @tokenize(data.status.text), 'conj'
