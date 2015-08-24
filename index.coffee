@@ -4,9 +4,6 @@ TwitterClient = require './lib/twitter_client'
 
 express = require 'express'
 http = require 'http'
-https = require 'https'
-path = require 'path'
-qs = require 'querystring'
 {EventEmitter} = require 'events'
 {exec, spawn} = require 'child_process'
 
@@ -14,7 +11,6 @@ _ = require 'lodash'
 log4js = require 'log4js'
 Fiber = require 'fibers'
 kuromoji = require 'kuromoji'
-MilkCocoa = require "./lib/milkcocoa"
 require 'colors'
 
 ins = require('util').inspect
@@ -46,35 +42,6 @@ server = app.listen setting.PORT, ->
   logger.info "Express server listening at #{server.address().port} port"
 
 
-# DB
-milkcocoa = new MilkCocoa setting.MILKCOCOA.URL
-
-tweetDS = milkcocoa.dataStore "tweet"
-patternDS = milkcocoa.dataStore "pattern"
-
-tweetDS.on 'push', (data)->
-  logger.debug data
-
-patternDS.on 'push', (data)->
-  logger.debug data
-
-###
-setTimeout ->
-  ds.query().sort('asc').limit(10).done (data)->
-    _.forEach data, (v)-> ds.remove v.id
-, 3000
-###
-
-setInterval ->
-  logger.info "tweetDS clean check"
-  tweetDS.query().done (data)->
-    logger.info "data: #{data.length}"
-    if data.length > 100000
-      logger.info "clean"
-      _.forEach _.take(data, 10000), (v)-> tweetDS.remove v.id
-, 21600000
-
-
 # twitter
 tw_client = new TwitterClient app, '1.0A', setting.TWITTER.CONSUMER_KEY, setting.TWITTER.CONSUMER_SECRET, setting.TWITTER.ACCESS_TOKEN, setting.TWITTER.ACCESS_SECRET
 
@@ -82,12 +49,15 @@ class TwitterBot
   constructor: (@client, @tokenize)->
     @action = new EventEmitter()
     @self_id = setting.TWITTER.OWNER_ID
+    @commands = []
+    @response = []
+    @resonance = []
 
   start: ->
 
     tw_callback = (err, res)->
       return unless err
-      logger.error "error: #{ins err}".red if err
+      logger.error "#{ins err}".red if err
       logger.debug "result: #{ins res}".green if res
 
     tps = 0
@@ -101,7 +71,7 @@ class TwitterBot
     @action.on "tweet", (data)=>
       tps++
       if tps > 3
-        @client.tweet "@mokha_t 異常を確認しました。終了します。"
+        @client.tweet "@#{setting.PARENT} 異常を確認しました。終了します。"
         setTimeout (-> process.exit 1), 1000
         return
       data.text = @afterReplace data.text
@@ -143,6 +113,60 @@ class TwitterBot
         stream.on 'end', =>
           logger.info "stream end.".red
           setTimeout (=> @reconnect()), 1000
+
+    @addCommand /stop/i, (screen_name, text, cb)->
+      setTimeout (-> process.exit 1), 1000
+      cb "終了します"
+
+    @addCommand /ping/i, (screen_name, text, cb)->
+      cb "pong"
+      
+    @addCommand /date/i, (screen_name, text, cb)->
+      exec 'date', (error, stdout, stderr)->
+        cb "\n#{stdout}"
+
+    @addCommand /lasterror/i, (screen_name, text, cb)->
+      exec 'cat app.log.1 app.log | grep ERROR | tail -1', (error, stdout, stderr)->
+        cb "\n#{stdout}"
+
+    @addCommand /lastwarn/i, (screen_name, text, cb)->
+      exec 'cat app.log.1 app.log | grep WARN | tail -1', (error, stdout, stderr)->
+        cb "\n#{stdout}"
+
+    @addResponse /./, (screen_name, text, token, cb)-> 
+      console.log "#{ins token}"
+      false
+
+    @addResponse /./, (screen_name, text, token, cb)-> 
+      parts = _.map token, 'conj'
+      if parts.some((v)-> /命令/.test v)
+        cb util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
+        return true
+      false
+
+    @addResponse /./, (screen_name, text, token, cb)=>
+      @createResponse text, token, (text)->
+        cb text
+      true
+    
+    @addResonance /matcha|まっちゃ/i, (text, cb)->
+      cb util.randArray ["まっちゃ", "matcha", "MATCHA", "Matcha", "マッチャ", "抹茶"]
+      true
+
+    @addResonance /抹茶bot/, (text, cb)->
+      cb util.randArray ["抹茶おいしい！抹茶！", "∵ゞ(＞д＜)ﾊｯｸｼｭﾝ!", "(　>д<)､;'.･　ｨｸｼｯ", "(* >ω<)=3ﾍｯｸｼｮﾝ!", "Σ", "∑", "嫌ー！"]
+      true
+
+    @addResonance /抹茶村/, (text, cb)->
+      false
+
+    @addResonance /抹茶/, (text, cb) ->
+      cb util.randArray ["抹茶おいしい！抹茶！", "！！", "ぽよ", "にゃーん", "抹茶", "matcha"]
+      true
+
+    @addResonance /嫌ー+[!！]+/, (text, cb)->
+      cb util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
+      true
 
     @connect()
 
@@ -188,92 +212,56 @@ class TwitterBot
     return if isBot
 
     if isMention
-      if /stop/i.test data.status.text
-        @action.emit 'reply',
-          status_id: data.status.id
-          screen_name: data.user.screen_name
-          text: "終了します。"
-        setTimeout (-> process.exit 1), 1000
-        return
+      for command in @commands
+        if command.regex.test data.status.text
+          command.callback data.user.screen_name, data.status.text, (text)=>
+            @action.emit 'reply',
+              status_id: data.status.id
+              screen_name: data.user.screen_name
+              text: text
+          return
 
-      if /cal/i.test data.status.text
-        exec 'cal', (error, stdout, stderr)->
-          @action.emit 'reply',
-            status_id: data.status.id
-            screen_name: data.user.screen_name
-            text: "\n#{stdout}"
-        return
+      token = @tokenize data.status.text
+      for res in @response
+        if res.regex.test data.status.text
+          return if res.callback data.user.screen_name, data.status.text, token, (res)=>
+            @action.emit 'reply',
+              status_id: data.status.id
+              screen_name: data.user.screen_name
+              text: res
 
-      parts = _.map @tokenize(data.status.text), 'conj'
-      console.log parts
-      if parts.some((v)-> /命令/.test v)
-        @action.emit 'reply',
-          status_id: data.status.id
-          screen_name: data.user.screen_name
-          text: util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
-        return
-
-      @createTweet (text)=>
-        @action.emit 'reply',
-          status_id: data.status.id
-          screen_name: data.user.screen_name
-          text: text
       return
 
-    if ["まっちゃ", "matcha", "MATCHA", "Matcha", "マッチャ"].some((v)-> v is data.status.text)
-      @action.emit 'tweet', text: util.randArray(["まっちゃ", "matcha", "MATCHA", "Matcha", "マッチャ", "抹茶"])
-      @action.emit 'favorite', status_id: data.status.id
-      return
+    for res in @resonance
+      if res.regex.test data.status.text
+        return if res.callback data.status.text, (res)=>
+          @action.emit 'tweet', text: res
+          @action.emit 'favorite', status_id: data.status.id
 
-    if new RegExp(/抹茶bot/).test data.status.text
-      @action.emit 'tweet', text: util.randArray ["抹茶おいしい！抹茶！", "∵ゞ(＞д＜)ﾊｯｸｼｭﾝ!", "(　>д<)､;'.･　ｨｸｼｯ", "(* >ω<)=3ﾍｯｸｼｮﾝ!", "Σ", "∑", "嫌ー！"]
-      @action.emit 'favorite', status_id: data.status.id
-      return
-
-    if new RegExp(/抹茶村/).test data.status.text
-      return
-
-    if new RegExp(/抹茶/).test data.status.text
-      @action.emit 'tweet', text: util.randArray ["抹茶おいしい！抹茶！", "！！", "ぽよ", "にゃーん", "抹茶", "matcha"]
-      @action.emit 'favorite', status_id: data.status.id
-      return
-
-    if new RegExp(/嫌ー+[!！]+/).test data.status.text
-      @action.emit 'tweet', text: util.randArray ["嫌ー！", "嫌ー！！", "嫌ー！嫌ー！！"]
-      @action.emit 'favorite', status_id: data.status.id
-      return
-
-
-    if data.status.text.length < 4
-      return
-
-    return if data.user.protected
+    return if data.user.protected or data.status.text.length < 4
 
     if isLink
       data.status.text = data.status.text.replace /https*:[^\s　]+/g, ""
       urls = _.map data.status.urls, 'url'
       _.forEach urls, (url)->
-        tweetDS.push
-          first: ' '
-          second: encodeURIComponent url
-          third: '__end__'
+        encodedUrl = encodeURIComponent url
+        console.log "isLink: #{encodedUrl}".red
 
     if isHashtag
       data.status.text = data.status.text.replace /#[^\s　]+/g, ""
       tags = _.map data.status.hashtags, 'text'
       _.forEach tags, (tag)->
-        tweetDS.push
-          first: ' '
-          second: encodeURIComponent "##{tag}"
-          third: '__end__'
+        encodedTag = encodeURIComponent "##{tag}"
+        console.log "isTag: #{encodedTag}".red
 
     parts = _.map @tokenize(data.status.text), 'surface'
     @storeTweet parts
 
 
   storeTweet: (parts)->
+    return
     return if parts.length < 3
-
+    ###
     parts = _.map parts, (v)-> encodeURIComponent(v)
     current = ['__first__', '__first__', '']
 
@@ -293,11 +281,14 @@ class TwitterBot
     tweetDS.push
       first: current[1]
       second: '__end__'
-      third: '__end__'
+      third: '__end__'###
 
+  createResponse: (text, token, cb)->
+    return cb text
 
   createTweet: (cb)->
-    recur = (key, i, res)->
+    return cb "ポ"
+    ###recur = (key, i, res)->
       return cb(res.slice(0, 140)) if res.length > 140
       return cb(res) if i > 20
       flag = false
@@ -318,7 +309,7 @@ class TwitterBot
         res = "#{res}#{decodeURIComponent parts.second}" if parts.second isnt '__first__'
         recur parts.third, i + 1, "#{res}#{decodeURIComponent parts.third}"
 
-    recur '__first__', 0, ""
+    recur '__first__', 0, ""###
 
   procActivity: (data)->
 
@@ -330,7 +321,7 @@ class TwitterBot
 
   procUserUpdate: (data)->
 
-  preReplace: (text, screen_name)->
+  preReplace: (text, screen_name = "null")->
     text = text
       .replace new RegExp(/&quot;/g), '"'
       .replace new RegExp(/&lt;/g), '<'
@@ -344,6 +335,21 @@ class TwitterBot
 
   afterReplace: (text, screen_name)->
     text
+  
+  addCommand: (regex, cb)->
+    @commands.push
+        regex: regex
+        callback: cb
+
+  addResponse: (regex, cb)->
+    @response.push
+        regex: regex
+        callback: cb
+
+  addResonance: (regex, cb)->
+    @resonance.push
+        regex: regex
+        callback: cb
 
 
 # kuromoji
@@ -353,17 +359,20 @@ kuromoji.builder(dicPath: KUROMOJI_DIC_DIR).build (err, tokenizer)->
   keymap =
     "surface_form": "surface"
     "pos": "type"
+    "pos_detail_1": "type1"
+    "pos_detail_2": "type2"
+    "pos_detail_3": "type3"
     "basic_form": "base"
     "reading": "reading"
     "conjugated_form": "conj"
 
-  analyer = (text)->
+  analyzer = (text)->
     _.map tokenizer.tokenize(text), (obj)->
-      console.log obj
+      #console.log obj
       _.transform obj, (res, v, k)->
         res[keymap[k]] = v if _.has(keymap, k)
 
-  bot = new TwitterBot tw_client, analyer
+  bot = new TwitterBot tw_client, analyzer
   bot.start()
 
 # uncaughtException
