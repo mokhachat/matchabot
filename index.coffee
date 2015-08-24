@@ -15,6 +15,10 @@ require 'colors'
 
 ins = require('util').inspect
 
+#DB
+nounDB = []
+sentenceDB = []
+
 
 # kuromoji
 KUROMOJI_DIC_DIR = "./node_modules/kuromoji/dist/dict/"
@@ -181,11 +185,12 @@ class TwitterBot
     return if data.user.id is @self_id
     isMention = if data.status.mentions.length is 0 then false else (data.status.mentions[0].id_str is @self_id)
     isRetweet = data.status.isRetweet
-    isRetweet2 = new RegExp(/(R|Q)T @[^\s　]+/g).test data.status.text
+    isRetweet2 = /(R|Q)T @[^\s　]+/g.test data.status.text
     isLink = if data.status.urls.length is 0 then false else true
+    isLink = true if /https*:[^\s　]+/.test data.status.text
     isHashtag = if data.status.hashtags.length is 0 then false else true
-    isBot = [data.user.screen_name, data.user.user_name, data.status.via].some (v)-> new RegExp(/bot/i).test(v)
-    isBot = false if new RegExp(/tweetbot/i).test data.status.via
+    isBot = [data.user.screen_name, data.user.user_name, data.status.via].some (v)-> /bot/i.test(v)
+    isBot = false if /tweetbot/i.test data.status.via
     isIgnore = [
       /Tweet Button/i
       /ツイ廃あらーと/i
@@ -200,7 +205,7 @@ class TwitterBot
       /autotweety/i
       /rekkacopy/i
       /ask\.fm/i
-    ].some (v)-> new RegExp(v).test data.status.via
+    ].some (v)-> v.test data.status.via
 
     urls = []
     tags = []
@@ -241,75 +246,75 @@ class TwitterBot
     return if data.user.protected or data.status.text.length < 4
 
     if isLink
-      data.status.text = data.status.text.replace /https*:[^\s　]+/g, ""
+      return
+      ###data.status.text = data.status.text.replace /https*:[^\s　]+/g, ""
       urls = _.map data.status.urls, 'url'
       _.forEach urls, (url)->
         encodedUrl = encodeURIComponent url
-        console.log "isLink: #{encodedUrl}".red
+        console.log "isLink: #{encodedUrl}".red###
 
-    if isHashtag
+    ###if isHashtag
       data.status.text = data.status.text.replace /#[^\s　]+/g, ""
       tags = _.map data.status.hashtags, 'text'
       _.forEach tags, (tag)->
-        encodedTag = encodeURIComponent "##{tag}"
-        console.log "isTag: #{encodedTag}".red
+        console.log "isTag: #{tag}"###
 
-    parts = _.map @tokenize(data.status.text), 'surface'
-    @storeTweet parts
+    @storeTweet @tokenize(data.status.text)
 
 
-  storeTweet: (parts)->
-    return
-    return if parts.length < 3
-    ###
-    parts = _.map parts, (v)-> encodeURIComponent(v)
-    current = ['__first__', '__first__', '']
+  storeTweet: (token)->
+    nounNum = 0
+    conjNum = 0
+    ppNum = 0
+    sentence = ""
+    token.forEach (v)->
+      console.log "#{ins v}"
+      if v.type is '名詞' and v.base isnt '*' and v.type1 is '一般'
+        nounNum++
+        nounDB.push v.surface
+        console.log "study: #{v.surface} [#{nounDB.length}]"
+        sentence += "$n#{nounNum}$"
+        return
+      if ['動詞', '形容詞', '形容動詞', '助動詞'].some((u)-> u is v.type)
+        conjNum++
+        sentence += v.surface
+        return
+      if ['助詞'].some((u)-> u is v.type)
+        ppNum++
+        sentence += v.surface
+        return
+      sentence += v.surface
+    #console.log "#{nounNum} #{conjNum} #{ppNum}"
+    if (nounNum > 0 and conjNum > 0) or (nounNum > 1 and ppNum > 0)
+      console.log "study: #{sentence}"
+      sentenceDB.push 
+        sentence: sentence
+        noun: nounNum
 
-    _.forEach parts, (v)->
-      current[2] = v
-      tweetDS.push
-        first: current[0]
-        second: current[1]
-        third: current[2]
-      current[0] = current[1]
-      current[1] = current[2]
-
-    tweetDS.push
-      first: current[0]
-      second: current[1]
-      third: '__end__'
-    tweetDS.push
-      first: current[1]
-      second: '__end__'
-      third: '__end__'###
 
   createResponse: (text, token, cb)->
-    return cb text
+    if sentenceDB.length is 0
+      return cb text
+    {sentence, noun} = util.randArray sentenceDB
+    if noun is 0
+      return cb sentence
+    if nounDB.length is 0
+      return cb text
+    [1..noun].forEach (v)->
+      sentence = sentence.replace ///\$n#{v}\$///, util.randArray(nounDB)
+    return cb sentence
 
   createTweet: (cb)->
-    return cb "ポ"
-    ###recur = (key, i, res)->
-      return cb(res.slice(0, 140)) if res.length > 140
-      return cb(res) if i > 20
-      flag = false
-      tweetDS.query(first: key).limit(1000).done (data)->
-        if flag
-          logger.warn "CALLED CALLBACK TWO TIMES !!"
-          return
-        flag = true
-        console.log key, data.length
-        return cb(res) unless data.length
-
-        parts = util.randArray data
-
-        if parts.third is '__end__'
-          res = "#{res}#{decodeURIComponent parts.second}" if parts.second isnt '__end__'
-          return cb res
-
-        res = "#{res}#{decodeURIComponent parts.second}" if parts.second isnt '__first__'
-        recur parts.third, i + 1, "#{res}#{decodeURIComponent parts.third}"
-
-    recur '__first__', 0, ""###
+    if sentenceDB.length is 0
+      return cb "ポ"
+    {sentence, noun} = util.randArray sentenceDB
+    if noun is 0
+      return cb sentence
+    if nounDB.length is 0
+      return cb "ポ"
+    [1..noun].forEach (v)->
+      sentence = sentence.replace ///\$n#{v}\$///, util.randArray(nounDB)
+    return cb sentence
 
   procActivity: (data)->
 
@@ -323,15 +328,15 @@ class TwitterBot
 
   preReplace: (text, screen_name = "null")->
     text = text
-      .replace new RegExp(/&quot;/g), '"'
-      .replace new RegExp(/&lt;/g), '<'
-      .replace new RegExp(/&gt;/g), '>'
-      .replace new RegExp(/&amp/g), '&'
-      .replace new RegExp(/(@|＠)[^\s　]+/g), ''
-      .replace new RegExp(/^[\s　]+/), ''
-      .replace new RegExp(/[\s　]+$/), ''
-      .replace new RegExp(/%at%/g), '@'
-      .replace new RegExp(/%me%/g), '@' + screen_name
+      .replace /&quot;/g, '"'
+      .replace /&lt;/g, '<'
+      .replace /&gt;/g, '>'
+      .replace /&amp/g, '&'
+      .replace /(@|＠)[^\s　]+/g, ''
+      .replace /^[\s　]+/, ''
+      .replace /[\s　]+$/, ''
+      .replace /%at%/g, '@'
+      .replace /%me%/g, '@' + screen_name
 
   afterReplace: (text, screen_name)->
     text
