@@ -358,17 +358,16 @@ class TwitterBot
     
   createTweet: (cb)->
     findSentence (s)->
-      return cb "ポ" unless s
+      return cb text unless s
       {sentence, nounNum} = s
       if nounNum is 0
         return cb sentence
-      [1..nounNum].forEach (v)->
-        fiber = Fiber.current
+      recur = (i)->
         findNoun (n)->
-          sentence = sentence.replace ///\$n#{v}\$///, n.noun
-          fiber.run()
-        Fiber.yield()
-      return cb sentence
+          sentence = sentence.replace ///\$n#{i}\$///, n.noun
+          return cb sentence if i is nounNum 
+          recur i + 1
+      recur 1
 
   procActivity: (data)->
 
