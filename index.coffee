@@ -11,13 +11,67 @@ _ = require 'lodash'
 log4js = require 'log4js'
 Fiber = require 'fibers'
 kuromoji = require 'kuromoji'
+mongoose = require 'mongoose'
 require 'colors'
 
 ins = require('util').inspect
 
 #DB
-nounDB = []
-sentenceDB = []
+sentenceSchema = new mongoose.Schema
+  sentence: String
+  nounNum: Number
+
+nounSchema = new mongoose.Schema
+  noun: String
+
+mongoose.model 'Sentence', sentenceSchema
+mongoose.model 'Noun', nounSchema
+
+mdb = mongoose.connect 'mongodb://localhost/matchabot'
+
+sentenceModel = mongoose.model 'Sentence'
+nounModel = mongoose.model 'Noun'
+
+registerSentence = (sentence, nounNum)->
+  s = new sentenceModel()
+  s.sentence = sentence
+  s.nounNum = nounNum
+  s.save (err)->
+    logger.error "#{err}".red if err
+
+registerNoun = (noun)->
+  n = new nounModel()
+  n.noun = noun
+  n.save (err)->
+    logger.error "#{err}".red if err
+
+findSentence = (cb)->
+  sentenceModel.count (err, count)->
+    if err
+      logger.error "#{err}".red
+      return cb null
+    if count is 0
+      logger.error "sentenceDB is empty.".red
+      return cb null 
+    rnd = util.rand count
+    sentenceModel.findOne().skip(rnd).exec (err, docs)->
+      return cb docs unless err
+      logger.error "#{err}".red
+      return cb null
+
+findNoun = (cb)->
+  nounModel.count (err, count)->
+    if err
+      logger.error "#{err}".red
+      return cb null
+    if count is 0
+      logger.error "nounDB is empty.".red
+      return cb null 
+    rnd = util.rand count
+    nounModel.findOne().skip(rnd).exec (err, docs)->
+      return cb docs unless err
+      logger.error "#{err}".red
+      return cb null
 
 
 # kuromoji
@@ -137,9 +191,9 @@ class TwitterBot
       exec 'cat app.log.1 app.log | grep WARN | tail -1', (error, stdout, stderr)->
         cb "\n#{stdout}"
 
-    @addResponse /./, (screen_name, text, token, cb)-> 
+    ###@addResponse /./, (screen_name, text, token, cb)-> 
       console.log "#{ins token}"
-      false
+      false###
 
     @addResponse /./, (screen_name, text, token, cb)-> 
       parts = _.map token, 'conj'
@@ -268,11 +322,11 @@ class TwitterBot
     ppNum = 0
     sentence = ""
     token.forEach (v)->
-      console.log "#{ins v}"
-      if v.type is '名詞' and v.base isnt '*' and v.type1 is '一般'
+      logger.info "#{ins v}"
+      if v.type is '名詞' and v.base isnt '*' and v.type1 is '一般' and v.surface.length > 1
         nounNum++
-        nounDB.push v.surface
-        console.log "study: #{v.surface} [#{nounDB.length}]"
+        registerNoun v.surface
+        #console.log "study: #{v.surface} [#{nounDB.length}]"
         sentence += "$n#{nounNum}$"
         return
       if ['動詞', '形容詞', '形容動詞', '助動詞'].some((u)-> u is v.type)
@@ -284,37 +338,37 @@ class TwitterBot
         sentence += v.surface
         return
       sentence += v.surface
-    #console.log "#{nounNum} #{conjNum} #{ppNum}"
     if (nounNum > 0 and conjNum > 0) or (nounNum > 1 and ppNum > 0)
       console.log "study: #{sentence}"
-      sentenceDB.push 
-        sentence: sentence
-        noun: nounNum
+      registerSentence sentence, nounNum
 
 
   createResponse: (text, token, cb)->
-    if sentenceDB.length is 0
-      return cb text
-    {sentence, noun} = util.randArray sentenceDB
-    if noun is 0
-      return cb sentence
-    if nounDB.length is 0
-      return cb text
-    [1..noun].forEach (v)->
-      sentence = sentence.replace ///\$n#{v}\$///, util.randArray(nounDB)
-    return cb sentence
-
+    findSentence (s)->
+      return cb text unless s
+      {sentence, nounNum} = s
+      if nounNum is 0
+        return cb sentence
+      recur = (i)->
+        findNoun (n)->
+          sentence = sentence.replace ///\$n#{i}\$///, n.noun
+          return cb sentence if i is nounNum 
+          recur i + 1
+      recur 1
+    
   createTweet: (cb)->
-    if sentenceDB.length is 0
-      return cb "ポ"
-    {sentence, noun} = util.randArray sentenceDB
-    if noun is 0
+    findSentence (s)->
+      return cb "ポ" unless s
+      {sentence, nounNum} = s
+      if nounNum is 0
+        return cb sentence
+      [1..nounNum].forEach (v)->
+        fiber = Fiber.current
+        findNoun (n)->
+          sentence = sentence.replace ///\$n#{v}\$///, n.noun
+          fiber.run()
+        Fiber.yield()
       return cb sentence
-    if nounDB.length is 0
-      return cb "ポ"
-    [1..noun].forEach (v)->
-      sentence = sentence.replace ///\$n#{v}\$///, util.randArray(nounDB)
-    return cb sentence
 
   procActivity: (data)->
 
