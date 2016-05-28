@@ -6,7 +6,7 @@
   "dependencies": {
     "colors": "^1.0.3",
     "express": "^3.4.8",
-    "fibers": "^1.0.5",
+    "fibers": "^1.0.13",
     "kuromoji": "0.0.2",
     "lodash": "^3.3.1",
     "log4js": "^0.6.22",

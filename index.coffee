@@ -297,7 +297,8 @@ class TwitterBot
           @action.emit 'tweet', text: res
           @action.emit 'favorite', status_id: data.status.id
 
-    return if data.user.protected or data.status.text.length < 4
+    #return if data.user.protected or data.status.text.length < 4
+    return if data.status.text.length < 4
 
     if isLink
       return
