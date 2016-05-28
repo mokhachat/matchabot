@@ -84,7 +84,7 @@ log4js.configure
   ,
     "type": "file"
     "category": "app"
-    "maxLogSize": 20480
+    "maxLogSize": 2048000
     "filename": "./app.log"
   ]
 
@@ -324,7 +324,8 @@ class TwitterBot
     sentence = ""
     token.forEach (v)->
       logger.info "#{ins v}"
-      if v.type is '名詞' and v.base isnt '*' and v.type1 is '一般' and v.surface.length > 1
+      #if v.type is '名詞' and v.base isnt '*' and v.type1 is '一般' and v.surface.length > 1
+      if v.type is '名詞' and v.base isnt '*' and v.surface.length > 1
         nounNum++
         registerNoun v.surface
         #console.log "study: #{v.surface} [#{nounDB.length}]"
